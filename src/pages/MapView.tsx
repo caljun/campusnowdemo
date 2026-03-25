@@ -189,13 +189,14 @@ export default function MapView({ mapOpen, onClose, flyTarget, onFlied }: Props)
         zoom={17}
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
+        attributionControl={false}
         dragging={false}
         scrollWheelZoom={false}
         doubleClickZoom={false}
         touchZoom={false}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          attribution=""
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <Circle
