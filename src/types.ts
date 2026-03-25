@@ -12,3 +12,10 @@ export interface Post {
   title?: string;
   replyCount?: number;
 }
+
+export interface Reply {
+  id: string;
+  displayName: string;
+  text: string;
+  createdAt: number;
+}
