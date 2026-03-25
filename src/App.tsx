@@ -47,7 +47,7 @@ export default function App() {
           className={
             mapOpen
               ? "fixed inset-0 z-50"
-              : "fixed bottom-5 right-4 z-40 w-36 h-24 rounded-2xl overflow-hidden shadow-xl cursor-pointer border-2 border-white"
+              : "fixed bottom-5 right-4 z-40 w-36 h-24 md:w-64 md:h-44 rounded-2xl overflow-hidden shadow-xl cursor-pointer border-2 border-white"
           }
           style={{ transition: "all 0.3s ease" }}
         >
