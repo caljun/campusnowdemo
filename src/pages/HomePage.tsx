@@ -120,15 +120,15 @@ export default function HomePage() {
       displayName: DEMO_NAME,
       text: text.trim(),
       createdAt: Date.now(),
-      ...(postType === "post" && {
-        anonymous,
-        lat: myPos.lat,
-        lng: myPos.lng,
-      }),
-      ...((postType === "board" || postType === "announcement") && {
-        title: title.trim(),
-        replyCount: 0,
-      }),
+      lat: myPos.lat,
+      lng: myPos.lng,
+      ...(postType === "post" ? { anonymous } : {}),
+      ...(postType === "board" || postType === "announcement"
+        ? {
+            title: title.trim(),
+            replyCount: 0,
+          }
+        : {}),
     });
 
     setShowModal(false);

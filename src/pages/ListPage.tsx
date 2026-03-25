@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { usePosts } from "../context/PostsContext";
 import type { LatLng } from "../App";
 import type { Post, PostType } from "../types";
+import { GEOFENCE_RADIUS_M, getLocation, haversineDistance, type LocationId, LOCATIONS } from "../geo";
 
 function timeAgo(ms: number): string {
   const diff = Date.now() - ms;
@@ -33,25 +34,85 @@ const TYPE_LABELS: Record<PostType, string> = {
 };
 
 interface Props {
+  activeLocationId: LocationId;
+  onActiveLocationChange: (id: LocationId) => void;
   onLocate: (pos: LatLng) => void;
   onBoardSelect: (post: Post) => void;
 }
 
-export default function ListPage({ onLocate, onBoardSelect }: Props) {
+export default function ListPage({ activeLocationId, onActiveLocationChange, onLocate, onBoardSelect }: Props) {
   const { posts } = usePosts();
   const [tab, setTab] = useState<Tab>("all");
 
-  const filtered = tab === "all" ? posts : posts.filter((p) => p.type === tab);
+  const [showLocationMenu, setShowLocationMenu] = useState(false);
+
+  const activeLocation = useMemo(() => getLocation(activeLocationId), [activeLocationId]);
+
+  const filtered = useMemo(() => {
+    const byType = tab === "all" ? posts : posts.filter((p) => p.type === tab);
+
+    // 選択中のエリア（ジオフェンス半径内）に紐づく投稿だけ表示する
+    return byType.filter((p) => {
+      if (p.lat == null || p.lng == null) return true; // 念のため（データが無い場合でもUIが空にならない）
+      const d = haversineDistance(p.lat, p.lng, activeLocation.lat, activeLocation.lng);
+      return d <= GEOFENCE_RADIUS_M;
+    });
+  }, [activeLocation.lat, activeLocation.lng, posts, tab]);
+
+  const activeLocationName = activeLocation.name;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="flex items-end justify-between mb-5">
         <h1 className="text-xl font-bold text-gray-900">タイムライン</h1>
-        <div className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowLocationMenu((v) => !v)}
+            className="flex items-center gap-1.5 bg-white border border-gray-100 text-gray-700 px-3 py-1.5 rounded-full shadow-sm hover:bg-gray-50 transition text-xs font-semibold"
+          >
+            <span className="text-indigo-600">{activeLocationName}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-          <span className="text-xs font-medium">{filtered.length}件</span>
+
+          <div className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full">
+            <span className="text-xs font-medium">{filtered.length}件</span>
+          </div>
         </div>
       </div>
+
+      {showLocationMenu && (
+        <div className="relative -mt-4 mb-4">
+          <div className="absolute right-0 top-0 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden w-44">
+            {LOCATIONS.map((loc) => (
+              <button
+                key={loc.id}
+                type="button"
+                onClick={() => {
+                  onActiveLocationChange(loc.id);
+                  setShowLocationMenu(false);
+                }}
+                className={`w-full text-left px-4 py-2.5 text-sm transition flex items-center justify-between ${
+                  loc.id === activeLocationId
+                    ? "bg-indigo-50 text-indigo-600 font-semibold"
+                    : "text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {loc.name}
+                {loc.id === activeLocationId && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
         {TABS.map(({ key, label }) => (

@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Circle, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { usePosts } from "../context/PostsContext";
+import { GEOFENCE_RADIUS_M, getLocation, haversineDistance, type LocationId, LOCATIONS, isWithinGeofence } from "../geo";
 import type { LatLng } from "../App";
 import type { PostType } from "../types";
+import { useMemo } from "react";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -13,24 +15,11 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-const GEOFENCE_RADIUS_M = 120;
-
-const LOCATIONS = [
-  { id: "quintbridge", name: "NTT西日本本社", lat: 34.699494, lng: 135.530389 },
-  { id: "osakajo",     name: "大阪城",       lat: 34.687315, lng: 135.526201 },
+const POST_TYPES: { type: PostType; label: string; desc: string }[] = [
+  { type: "post", label: "投稿", desc: "普通の投稿（匿名可）" },
+  { type: "board", label: "掲示板", desc: "返信できるスレッド（実名）" },
+  { type: "announcement", label: "告知", desc: "お知らせ（実名）" },
 ];
-
-type LocationId = typeof LOCATIONS[number]["id"];
-
-function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 function timeAgo(ms: number): string {
   const diff = Date.now() - ms;
@@ -115,12 +104,6 @@ function MyLocationButton({ pos }: { pos: { lat: number; lng: number } | null })
   );
 }
 
-const POST_TYPES: { type: PostType; label: string; desc: string }[] = [
-  { type: "post",         label: "投稿",   desc: "普通の投稿（匿名可）" },
-  { type: "board",        label: "掲示板", desc: "返信できるスレッド（実名）" },
-  { type: "announcement", label: "告知",   desc: "お知らせ（実名）" },
-];
-
 const DEMO_NAME = "デモユーザー";
 
 interface Props {
@@ -128,13 +111,21 @@ interface Props {
   onClose: () => void;
   flyTarget: LatLng | null;
   onFlied: () => void;
+  activeLocationId: LocationId;
+  onActiveLocationChange: (id: LocationId) => void;
 }
 
-export default function MapView({ mapOpen, onClose, flyTarget, onFlied }: Props) {
+export default function MapView({
+  mapOpen,
+  onClose,
+  flyTarget,
+  onFlied,
+  activeLocationId,
+  onActiveLocationChange,
+}: Props) {
   const { posts, addPost } = usePosts();
   const markerRefs = useRef<Record<string, L.CircleMarker | null>>({});
   const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
-  const [activeLocationId, setActiveLocationId] = useState<LocationId>("quintbridge");
   const [showLocationMenu, setShowLocationMenu] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [postType, setPostType] = useState<PostType>("post");
@@ -142,12 +133,15 @@ export default function MapView({ mapOpen, onClose, flyTarget, onFlied }: Props)
   const [text, setText] = useState("");
   const [anonymous, setAnonymous] = useState(false);
 
-  const activeLocation = LOCATIONS.find((l) => l.id === activeLocationId)!;
-  const inRange = myPos
-    ? haversineDistance(myPos.lat, myPos.lng, activeLocation.lat, activeLocation.lng) <= GEOFENCE_RADIUS_M
-    : false;
+  const activeLocation = useMemo(() => getLocation(activeLocationId), [activeLocationId]);
+  const inRange = isWithinGeofence(myPos, activeLocationId);
 
-  const mapPosts = posts.filter((p) => p.type === "post" && p.lat != null);
+  const mapPosts = posts.filter((p) => {
+    if (p.type !== "post") return false;
+    if (p.lat == null || p.lng == null) return false;
+    const d = haversineDistance(p.lat, p.lng, activeLocation.lat, activeLocation.lng);
+    return d <= GEOFENCE_RADIUS_M;
+  });
 
   useEffect(() => {
     const watchId = navigator.geolocation.watchPosition(
@@ -175,8 +169,10 @@ export default function MapView({ mapOpen, onClose, flyTarget, onFlied }: Props)
       displayName: DEMO_NAME,
       text: text.trim(),
       createdAt: Date.now(),
-      ...(postType === "post" && { anonymous, lat: myPos.lat, lng: myPos.lng }),
-      ...((postType === "board" || postType === "announcement") && { title: title.trim(), replyCount: 0 }),
+      anonymous: postType === "post" ? anonymous : undefined,
+      lat: myPos.lat,
+      lng: myPos.lng,
+      ...(postType === "board" || postType === "announcement" ? { title: title.trim(), replyCount: 0 } : {}),
     });
 
     setShowModal(false);
@@ -185,7 +181,7 @@ export default function MapView({ mapOpen, onClose, flyTarget, onFlied }: Props)
   return (
     <div className="w-full h-full relative">
       <MapContainer
-        center={[LOCATIONS[0].lat, LOCATIONS[0].lng]}
+        center={[activeLocation.lat, activeLocation.lng]}
         zoom={17}
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
@@ -269,7 +265,10 @@ export default function MapView({ mapOpen, onClose, flyTarget, onFlied }: Props)
                 {LOCATIONS.map((loc) => (
                   <button
                     key={loc.id}
-                    onClick={() => { setActiveLocationId(loc.id); setShowLocationMenu(false); }}
+                    onClick={() => {
+                      onActiveLocationChange(loc.id);
+                      setShowLocationMenu(false);
+                    }}
                     className={`w-full text-left px-4 py-2.5 text-sm transition flex items-center justify-between ${
                       loc.id === activeLocationId
                         ? "bg-indigo-50 text-indigo-600 font-semibold"

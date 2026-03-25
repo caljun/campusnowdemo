@@ -5,6 +5,7 @@ import ListPage from "./pages/ListPage";
 import ProfilePage from "./pages/ProfilePage";
 import BoardDetailPage from "./pages/BoardDetailPage";
 import type { Post } from "./types";
+import type { LocationId } from "./geo";
 
 export type LatLng = { lat: number; lng: number; postId?: string };
 
@@ -13,6 +14,7 @@ export default function App() {
   const [flyTarget, setFlyTarget] = useState<LatLng | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [selectedBoard, setSelectedBoard] = useState<Post | null>(null);
+  const [activeLocationId, setActiveLocationId] = useState<LocationId>("quintbridge");
 
   const handleLocate = (pos: LatLng) => {
     setFlyTarget(pos);
@@ -38,7 +40,12 @@ export default function App() {
 
         {/* Timeline */}
         <div className="pt-12">
-          <ListPage onLocate={handleLocate} onBoardSelect={setSelectedBoard} />
+          <ListPage
+            activeLocationId={activeLocationId}
+            onActiveLocationChange={setActiveLocationId}
+            onLocate={handleLocate}
+            onBoardSelect={setSelectedBoard}
+          />
         </div>
 
         {/* Map — thumbnail or fullscreen */}
@@ -56,6 +63,8 @@ export default function App() {
             onClose={() => setMapOpen(false)}
             flyTarget={flyTarget}
             onFlied={() => setFlyTarget(null)}
+            activeLocationId={activeLocationId}
+            onActiveLocationChange={setActiveLocationId}
           />
 
           {/* Overlay label when thumbnail */}
