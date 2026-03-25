@@ -67,7 +67,7 @@ function FlyToTarget({
 }: {
   target: LatLng | null;
   onFlied: () => void;
-  markerRefs: React.MutableRefObject<Record<string, L.CircleMarker | null>>;
+  markerRefs: React.RefObject<Record<string, L.CircleMarker | null>>;
 }) {
   const map = useMap();
   const onFliedRef = useRef(onFlied);
